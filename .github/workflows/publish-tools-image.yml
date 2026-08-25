@@ -8,12 +8,6 @@ on:
         required: true
         default: "0.1.0"
         type: string
-      envd_ref:
-        description: e2b-dev/infra ref used to build envd
-        required: true
-        default: "2026.17"
-        type: string
-
 jobs:
   validate:
     name: Validate publication
@@ -23,6 +17,18 @@ jobs:
       packages: read
     steps:
       - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: tools-image/envd/go.mod
+          cache-dependency-path: |
+            tools-image/envd/go.sum
+            tools-image/envd/shared/go.sum
+
+      - name: Install envd test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bindfs
 
       - name: Set lowercase owner
         run: echo "OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
@@ -40,6 +46,10 @@ jobs:
         env:
           TOOLS_VERSION: ${{ inputs.tools_version }}
         run: |
+          make -C tools-image test
+          make -C tools-image/envd fmt-check
+          make -C tools-image/envd vet
+          make -C tools-image/envd test
           make -C tools-image check-tools-version TOOLS_VERSION="$TOOLS_VERSION"
           image="ghcr.io/$OWNER/agentenv-tools:$TOOLS_VERSION"
           if docker buildx imagetools inspect "$image" >/dev/null 2>&1; then
@@ -87,8 +97,7 @@ jobs:
           target: artifact
           build-args: |
             TOOLS_VERSION=${{ inputs.tools_version }}
-            ENVD_REF=${{ inputs.envd_ref }}
-            ENVD_UPSTREAM_REPO=https://github.com/e2b-dev/infra.git
+            ENVD_COMMIT=${{ github.sha }}
           tags: ghcr.io/${{ env.OWNER }}/agentenv-tools:${{ inputs.tools_version }}-${{ matrix.arch }}
           push: true
 

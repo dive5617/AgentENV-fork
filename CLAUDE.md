@@ -13,6 +13,8 @@ make clippy                   # clippy with -D warnings
 make test                     # full test suite (agent + envd + ublk)
 make test-unit                # unit tests only
 make test-agent-integration   # integration tests (tests/integration/*.rs)
+make build-envd-source        # cross-compile the in-tree guest envd for Linux
+make test-envd-source         # test the in-tree envd and minimal shared module
 make bench                    # snapshot benchmarks
 make start-server             # build and run the API server (auto-provisions dependencies)
 ```
@@ -126,6 +128,7 @@ For the OSS repository backend, `snapshot_image_storage = "source_registry"` pub
 - `crates/shell-util`: shared `shell_quote` helper used by `agentenv` and `aenv` to single-quote shell arguments
 - `crates/warm-pool`: generic watermark-based resource pool shared by the network slot manager and overlaybd ublk device pooling
 - `services` (Go module): control-plane services (`gateway`, `scheduler`) with independent `go.mod` and `services/Makefile`
+- `tools-image/envd` (Go module): independently maintained guest daemon source and minimal imported shared-package closure used to build the tools drive; provenance is recorded in `tools-image/envd/UPSTREAM.md`
 - `src/api/generated`: OpenAPI-generated Axum server; regenerate with `make agentenv-server`
 - `src/custom_extension_api/generated` (`custom_extension_client`): generated custom extension hook client from `src/custom_extension_api/openapi.yml`; regenerate with `make custom-extension-client`
 - `thirdparty/firecracker-client`: generated Firecracker API client; regenerate with `make firecracker-client`

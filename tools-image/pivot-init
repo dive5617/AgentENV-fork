@@ -121,7 +121,7 @@ generate_resolv_conf
 $BB cat > /run/sv/envd/run << 'RUNSV_EOF'
 #!/agentenv/bin/busybox sh
 exec 2>>/var/log/agentenv/envd.stderr.log  # append across restarts; unbounded but VM-ephemeral
-exec /agentenv/envd
+exec /agentenv/envd -disable-bash-login-shell
 RUNSV_EOF
 $BB chmod 0755 /run/sv/envd/run
 

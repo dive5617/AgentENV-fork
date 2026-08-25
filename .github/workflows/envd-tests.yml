@@ -8,6 +8,7 @@ on:
         required: false
   pull_request:
     paths:
+      - "tools-image/**"
       - "thirdparty/envd/**"
       - "scripts/tests/test_envd.sh"
       - "scripts/lib/common.sh"
@@ -17,8 +18,10 @@ on:
       - "rust-toolchain.toml"
       - ".github/actions/rust-ci-setup/**"
       - ".github/workflows/envd-tests.yml"
+      - ".github/workflows/publish-tools-image.yml"
   push:
     paths:
+      - "tools-image/**"
       - "thirdparty/envd/**"
       - "scripts/tests/test_envd.sh"
       - "scripts/lib/common.sh"
@@ -28,6 +31,7 @@ on:
       - "rust-toolchain.toml"
       - ".github/actions/rust-ci-setup/**"
       - ".github/workflows/envd-tests.yml"
+      - ".github/workflows/publish-tools-image.yml"
 
 env:
   RUST_LOG: ${{ github.event.inputs.log_level || 'info' }}
@@ -37,6 +41,28 @@ permissions:
   packages: read
 
 jobs:
+  envd-source-tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: tools-image/envd/go.mod
+          cache-dependency-path: |
+            tools-image/envd/go.sum
+            tools-image/envd/shared/go.sum
+      - name: Install envd test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bindfs
+      - name: Check in-tree envd source
+        run: |
+          make -C tools-image test
+          make -C tools-image/envd fmt-check
+          make -C tools-image/envd vet
+          make -C tools-image/envd test
+          make -C tools-image/envd build BUILD_ARCH=amd64
+
   envd-tests:
     runs-on: ubuntu-22.04
     steps:

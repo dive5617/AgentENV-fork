@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker.m.daocloud.io/docker/dockerfile:1.7
 
 # AgentENV envd tools drive.
 #
@@ -18,46 +18,60 @@
 #
 # Build example:
 #
-#   make -C tools-image TOOLS_VERSION=0.1.0 ENVD_REF=2026.17
+#   make -C tools-image TOOLS_VERSION=0.1.0
 #
 # Important build args:
 #   TOOLS_VERSION        Immutable AgentENV tools drive release version.
-#   ENVD_REF             Tag/branch/commit to build from e2b-dev/infra.
-#   ENVD_UPSTREAM_REPO   envd source repository. Override for forks.
+#   ENVD_COMMIT          AgentENV source commit recorded by `envd -commit`.
 #   GO_VERSION           Go toolchain used to compile envd.
 #   BUSYBOX_IMAGE        BusyBox image copied into the guest tools rootfs.
 
-ARG BUSYBOX_IMAGE=busybox:1.37.0-musl
+ARG DOCKER_LIBRARY_REGISTRY=docker.m.daocloud.io/library
+ARG BUSYBOX_IMAGE=${DOCKER_LIBRARY_REGISTRY}/busybox:1.37.0-musl
+ARG APT_MIRROR_BASE=http://mirrors.aliyun.com
 ARG DEBIAN_VERSION=bookworm
 ARG GO_VERSION=1.25.9
 ARG TOOLS_VERSION=0.1.0
+ARG OBSERVABILITY_ARTIFACT_IMAGE=agentenv-observability-guest:feat-ob
+
+FROM ${OBSERVABILITY_ARTIFACT_IMAGE} AS observability-artifacts
 
 # ---------------------------------------------------------------------------
-# Stage 1: compile envd from upstream source.
+# Stage 1: compile the repository-owned envd source.
 #
-# The tools drive build pins an upstream ref, compiles a static envd binary,
-# and injects the resolved git commit into the binary for `envd -commit`.
+# The source is part of the AgentENV build context. The caller injects the
+# AgentENV revision into the binary for `envd -commit`.
 # ---------------------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-${DEBIAN_VERSION} AS envd-builder
+FROM --platform=$BUILDPLATFORM ${DOCKER_LIBRARY_REGISTRY}/golang:${GO_VERSION}-${DEBIAN_VERSION} AS envd-builder
 
+ARG APT_MIRROR_BASE
 ARG ENVD_REF=2026.17
 ARG ENVD_UPSTREAM_REPO=https://github.com/e2b-dev/infra.git
+ARG GOPROXY=https://goproxy.cn,direct
+ARG ENVD_COMMIT=unknown
 ARG TARGETARCH
 
-RUN apt-get update \
+RUN set -eux; \
+    for apt_sources in /etc/apt/sources.list /etc/apt/sources.list.d/*.sources; do \
+      [ -f "${apt_sources}" ] || continue; \
+      sed -i \
+        -e "s#http://deb.debian.org/debian#${APT_MIRROR_BASE}/debian#g" \
+        -e "s#http://security.debian.org/debian-security#${APT_MIRROR_BASE}/debian-security#g" \
+        -e "s#http://deb.debian.org/debian-security#${APT_MIRROR_BASE}/debian-security#g" \
+        "${apt_sources}"; \
+    done; \
+    apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates git \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /src
+WORKDIR /src/envd
 
-RUN set -eux; \
-    git init infra; \
-    cd infra; \
-    git remote add origin "$ENVD_UPSTREAM_REPO"; \
-    git fetch --depth 1 origin "$ENVD_REF"; \
-    git checkout --detach FETCH_HEAD
+COPY envd/go.mod envd/go.sum ./
+COPY envd/shared/go.mod envd/shared/go.sum ./shared/
 
-WORKDIR /src/infra/packages/envd
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
+
+COPY envd/ ./
 
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
@@ -66,10 +80,9 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
       amd64|arm64) ;; \
       *) echo "unsupported TARGETARCH: $TARGETARCH" >&2; exit 1 ;; \
     esac; \
-    commit_sha="$(git -C /src/infra rev-parse --short HEAD)"; \
-    CGO_ENABLED=0 GOOS=linux GOARCH="$TARGETARCH" \
+    CGO_ENABLED=0 GOOS=linux GOARCH="$TARGETARCH" GOPROXY="$GOPROXY" \
       go build \
-        -ldflags "-X=main.commitSHA=${commit_sha} -s -w" \
+        -ldflags "-X=main.commitSHA=${ENVD_COMMIT} -s -w" \
         -o /out/envd \
         .; \
     chmod 0755 /out/envd; \
@@ -97,7 +110,14 @@ ARG TOOLS_VERSION
 
 COPY --chmod=0755 init /tools-rootfs/init
 COPY --chmod=0755 pivot-init /tools-rootfs/agentenv/pivot-init
+COPY --chmod=0755 prepare-ca-bundle /tools-rootfs/agentenv/prepare-ca-bundle
 COPY --chmod=0755 --from=envd-builder /out/envd /tools-rootfs/agentenv/envd
+COPY --chmod=0755 --from=observability-artifacts /cube-observerd /tools-rootfs/agentenv/cube-observerd
+COPY --chmod=0755 --from=observability-artifacts /agentsight-process /tools-rootfs/agentenv/agentsight-process
+COPY --chmod=0755 --from=observability-artifacts /agentsight-process.bin /tools-rootfs/agentenv/agentsight-process.bin
+COPY --from=observability-artifacts /agentsight-runtime /tools-rootfs/agentenv/agentsight-runtime
+COPY --chmod=0644 --from=observability-artifacts /LICENSE.agentsight /tools-rootfs/agentenv/LICENSE.agentsight
+COPY --chmod=0644 --from=observability-artifacts /agentsight.version /tools-rootfs/agentenv/agentsight.version
 
 RUN set -eux; \
     mkdir -p \
@@ -123,9 +143,19 @@ RUN set -eux; \
 # image gets 50% content headroom and a 16 MiB floor to leave room for ext4
 # metadata, journal, and inode tables.
 # ---------------------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM debian:${DEBIAN_VERSION}-slim AS ext4-builder
+FROM --platform=$BUILDPLATFORM ${DOCKER_LIBRARY_REGISTRY}/debian:${DEBIAN_VERSION}-slim AS ext4-builder
 
-RUN apt-get update \
+ARG APT_MIRROR_BASE
+RUN set -eux; \
+    for apt_sources in /etc/apt/sources.list /etc/apt/sources.list.d/*.sources; do \
+      [ -f "${apt_sources}" ] || continue; \
+      sed -i \
+        -e "s#http://deb.debian.org/debian#${APT_MIRROR_BASE}/debian#g" \
+        -e "s#http://security.debian.org/debian-security#${APT_MIRROR_BASE}/debian-security#g" \
+        -e "s#http://deb.debian.org/debian-security#${APT_MIRROR_BASE}/debian-security#g" \
+        "${apt_sources}"; \
+    done; \
+    apt-get update \
     && apt-get install -y --no-install-recommends e2fsprogs findutils \
     && rm -rf /var/lib/apt/lists/*
 

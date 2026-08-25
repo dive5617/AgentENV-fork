@@ -2,10 +2,8 @@ SHELL := /usr/bin/env bash
 .SHELLFLAGS := -eu -o pipefail -c
 .DEFAULT_GOAL := build
 
-REPO_ROOT := ..
 TOOLS_VERSION ?= 0.1.0
-ENVD_REF ?= 2026.17
-ENVD_UPSTREAM_REPO ?= https://github.com/e2b-dev/infra.git
+ENVD_COMMIT ?= $(shell git rev-parse HEAD)
 HOST_MACHINE := $(shell uname -m)
 ifeq ($(HOST_MACHINE),x86_64)
 DEFAULT_ARCH := amd64
@@ -28,9 +26,17 @@ OUTPUT_DIR ?= out
 OUTPUT_NAME ?= tools-$(TOOLS_VERSION)-$(ARCH).ext4
 OUTPUT_PATH := $(OUTPUT_DIR)/$(OUTPUT_NAME)
 IMAGE ?= agentenv-tools:$(TOOLS_VERSION)
+OBSERVABILITY_ARTIFACT_IMAGE ?= agentenv-observability-guest:feat-ob
+DOCKER_LIBRARY_REGISTRY ?= docker.m.daocloud.io/library
+APT_MIRROR_BASE ?= http://mirrors.aliyun.com
+GOPROXY ?= https://goproxy.cn,direct
 DOCKER ?= docker
 
-.PHONY: build publish push check-buildx check-tools-version check-publish-image
+.PHONY: build publish push test check-buildx check-tools-version check-publish-image
+
+test:
+	./tests/verify-init-runtime-paths.sh
+	./tests/verify-ca-bundle-bootstrap.sh
 
 check-buildx:
 	@"$(DOCKER)" buildx version >/dev/null 2>&1 || { \
@@ -75,6 +81,11 @@ build: check-buildx check-tools-version
 		--build-arg "TOOLS_VERSION=$(TOOLS_VERSION)" \
 		--build-arg "ENVD_REF=$(ENVD_REF)" \
 		--build-arg "ENVD_UPSTREAM_REPO=$(ENVD_UPSTREAM_REPO)" \
+		--build-arg "OBSERVABILITY_ARTIFACT_IMAGE=$(OBSERVABILITY_ARTIFACT_IMAGE)" \
+		--build-arg "DOCKER_LIBRARY_REGISTRY=$(DOCKER_LIBRARY_REGISTRY)" \
+		--build-arg "APT_MIRROR_BASE=$(APT_MIRROR_BASE)" \
+		--build-arg "GOPROXY=$(GOPROXY)" \
+		--build-arg "ENVD_COMMIT=$(ENVD_COMMIT)" \
 		--output "type=local,dest=$(OUTPUT_DIR)" \
 		.
 	mv "$(OUTPUT_DIR)/tools.ext4" "$(OUTPUT_PATH)"
@@ -86,6 +97,11 @@ publish: check-buildx check-tools-version check-publish-image
 		--build-arg "TOOLS_VERSION=$(TOOLS_VERSION)" \
 		--build-arg "ENVD_REF=$(ENVD_REF)" \
 		--build-arg "ENVD_UPSTREAM_REPO=$(ENVD_UPSTREAM_REPO)" \
+		--build-arg "OBSERVABILITY_ARTIFACT_IMAGE=$(OBSERVABILITY_ARTIFACT_IMAGE)" \
+		--build-arg "DOCKER_LIBRARY_REGISTRY=$(DOCKER_LIBRARY_REGISTRY)" \
+		--build-arg "APT_MIRROR_BASE=$(APT_MIRROR_BASE)" \
+		--build-arg "GOPROXY=$(GOPROXY)" \
+		--build-arg "ENVD_COMMIT=$(ENVD_COMMIT)" \
 		-t "$(IMAGE)" \
 		--push \
 		.

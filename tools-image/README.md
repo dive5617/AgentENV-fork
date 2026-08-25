@@ -11,7 +11,7 @@ a local ext4 file.
 
 The build is intentionally self-contained:
 
-1. Clone and compile `envd` from `e2b-dev/infra` at `ENVD_REF`.
+1. Compile the repository-owned source from `./envd`.
 2. Assemble the guest tools rootfs with BusyBox, `/init`, `/agentenv/pivot-init`,
    and `/agentenv/envd`.
 3. Create `/tools.ext4`.
@@ -19,9 +19,14 @@ The build is intentionally self-contained:
 Requirements:
 
 - Docker with the Buildx plugin available (`docker buildx version`).
-- The default `GO_VERSION` is aligned with the default upstream `ENVD_REF`.
-  Override it from `docker buildx build` only if the selected envd source
-  supports a different Go toolchain.
+- The Dockerfile's `GO_VERSION` must remain compatible with `./envd/go.mod`.
+- The in-tree envd must support `-disable-bash-login-shell`. AgentENV enables
+  this opt-in policy at guest startup, and the build contract rejects a source
+  tree that no longer provides it.
+
+The initial envd import and license provenance are recorded in
+[`envd/UPSTREAM.md`](envd/UPSTREAM.md). Tools-image builds do not fetch
+envd source from another repository.
 
 ## Local Build
 
@@ -47,9 +52,8 @@ tools-image/out/tools-<TOOLS_VERSION>-<ARCH>.ext4
 
 `TOOLS_VERSION` is the SemVer release of the complete drive, including envd,
 BusyBox, and the init scripts. Published versions are immutable: any byte-level
-change requires a new version. `ENVD_REF` remains the upstream `e2b-dev/infra`
-ref used to compile envd and is not necessarily the same string as the version
-reported by the binary.
+change requires a new version. `ENVD_COMMIT` records the AgentENV source commit
+used for the build and is not the semantic version reported by the binary.
 
 Official releases use normal versions such as `0.1.0`. Custom distributions use
 a prerelease identifier that is unique within the AgentENV deployment, such as
@@ -78,34 +82,33 @@ there instead. The build also prints, for native builds:
 /out/envd -commit
 ```
 
-which identifies the upstream commit baked into the binary.
+which identifies the AgentENV commit baked into the binary.
 
 ## Configuration
 
 The build accepts these Make variables:
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `TOOLS_VERSION` | `0.1.0` | Immutable SemVer release of the complete tools drive |
-| `ENVD_REF` | `2026.17` | Tag, branch, or fetchable commit to build from the envd upstream repository |
-| `ENVD_UPSTREAM_REPO` | `https://github.com/e2b-dev/infra.git` | Repository containing `packages/envd` |
-| `ARCH` | host architecture, normalized to `amd64` or `arm64` | Target architecture |
-| `PUBLISH_PLATFORMS` | `linux/amd64,linux/arm64` | Platforms included in the published OCI image |
-| `OUTPUT_DIR` | `out` | Directory for exported tools drive images |
-| `OUTPUT_NAME` | `tools-${TOOLS_VERSION}-${ARCH}.ext4` | Versioned tools drive filename |
-| `IMAGE` | `agentenv-tools:${TOOLS_VERSION}` | Local or remote image tag |
-| `DOCKER` | `docker` | Docker CLI command |
+| Variable                       | Default                                             | Description                                                                                  |
+| ------------------------------ | --------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `TOOLS_VERSION`                | `0.1.0`                                             | Immutable SemVer release of the complete tools drive                                         |
+| `ENVD_COMMIT`                  | current AgentENV Git commit                         | Source revision embedded in `envd -commit`                                                   |
+| `ARCH`                         | host architecture, normalized to `amd64` or `arm64` | Target architecture                                                                          |
+| `PUBLISH_PLATFORMS`            | `linux/amd64,linux/arm64`                           | Platforms included in the published OCI image                                                |
+| `OUTPUT_DIR`                   | `out`                                               | Directory for exported tools drive images                                                    |
+| `OUTPUT_NAME`                  | `tools-${TOOLS_VERSION}-${ARCH}.ext4`               | Versioned tools drive filename                                                               |
+| `IMAGE`                        | `agentenv-tools:${TOOLS_VERSION}`                   | Local or remote image tag                                                                    |
+| `OBSERVABILITY_ARTIFACT_IMAGE` | `agentenv-observability-guest:feat-ob`              | Architecture-matched Guest observer artifact image consumed while assembling the tools drive |
+| `DOCKER_LIBRARY_REGISTRY`      | `docker.m.daocloud.io/library`                      | Reachable Docker Official Images mirror used for BusyBox, Go, and Debian build stages        |
+| `APT_MIRROR_BASE`              | `http://mirrors.aliyun.com`                         | Debian package mirror base used by the envd and ext4 builder stages                          |
+| `GOPROXY`                      | `https://goproxy.cn,direct`                         | Go module proxy used while compiling envd                                                    |
+| `DOCKER`                       | `docker`                                            | Docker CLI command                                                                           |
 
 Examples:
 
 ```bash
-make TOOLS_VERSION=0.1.0 ENVD_REF=2026.17 ARCH=amd64
+make TOOLS_VERSION=0.1.0 ARCH=amd64
 
-make \
-  ENVD_UPSTREAM_REPO=https://github.com/e2b-dev/infra.git \
-  TOOLS_VERSION=0.1.0 \
-  ENVD_REF=2026.17 \
-  ARCH=amd64
+make TOOLS_VERSION=0.1.0 ENVD_COMMIT="$(git rev-parse HEAD)" ARCH=amd64
 ```
 
 ## Publish
@@ -119,12 +122,12 @@ tags to prevent concurrent or external publishers from replacing a release.
 ```bash
 make publish \
   TOOLS_VERSION=0.1.0 \
-  ENVD_REF=2026.17 \
   IMAGE=ghcr.io/kvcache-ai/agentenv-tools:0.1.0
 
 make publish \
   TOOLS_VERSION=0.1.0-custom.1 \
   ENVD_REF=2026.17 \
+  OBSERVABILITY_ARTIFACT_IMAGE=registry.example.com/custom/agentenv-observability-guest:0.1.0-custom.1 \
   IMAGE=registry.example.com/custom/agentenv-tools:0.1.0-custom.1
 ```
 
