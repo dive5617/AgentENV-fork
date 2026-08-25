@@ -14,12 +14,11 @@
 #
 # Build example:
 #
-#   make -C tools-image TOOLS_VERSION=0.1.1 ENVD_REF=2026.17
+#   make -C tools-image TOOLS_VERSION=0.1.1
 #
 # Important build args:
 #   TOOLS_VERSION        Immutable AgentENV tools drive release version.
-#   ENVD_REF             Tag/branch/commit to build from e2b-dev/infra.
-#   ENVD_UPSTREAM_REPO   envd source repository. Override for forks.
+#   ENVD_COMMIT          AgentENV source revision recorded by envd -commit.
 #   GO_VERSION           Go toolchain used to compile envd.
 #   BUSYBOX_IMAGE        BusyBox image copied into the guest tools rootfs.
 
@@ -29,31 +28,24 @@ ARG GO_VERSION=1.25.9
 ARG TOOLS_VERSION=0.1.1
 
 # ---------------------------------------------------------------------------
-# Stage 1: compile envd from upstream source.
+# Stage 1: compile the repository-owned envd source.
 #
-# The tools drive build pins an upstream ref, compiles a static envd binary,
-# and injects the resolved git commit into the binary for `envd -commit`.
+# The source is part of the AgentENV build context. The caller injects the
+# AgentENV revision into the binary for `envd -commit`.
 # ---------------------------------------------------------------------------
 FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-${DEBIAN_VERSION} AS envd-builder
 
-ARG ENVD_REF=2026.17
-ARG ENVD_UPSTREAM_REPO=https://github.com/e2b-dev/infra.git
+ARG ENVD_COMMIT=unknown
 ARG TARGETARCH
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates git \
-    && rm -rf /var/lib/apt/lists/*
+WORKDIR /src/envd
 
-WORKDIR /src
+COPY envd/go.mod envd/go.sum ./
+COPY envd/shared/go.mod envd/shared/go.sum ./shared/
 
-RUN set -eux; \
-    git init infra; \
-    cd infra; \
-    git remote add origin "$ENVD_UPSTREAM_REPO"; \
-    git fetch --depth 1 origin "$ENVD_REF"; \
-    git checkout --detach FETCH_HEAD
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
 
-WORKDIR /src/infra/packages/envd
+COPY envd/ ./
 
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
@@ -62,10 +54,10 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
       amd64|arm64) ;; \
       *) echo "unsupported TARGETARCH: $TARGETARCH" >&2; exit 1 ;; \
     esac; \
-    commit_sha="$(git -C /src/infra rev-parse --short HEAD)"; \
     CGO_ENABLED=0 GOOS=linux GOARCH="$TARGETARCH" \
       go build \
-        -ldflags "-X=main.commitSHA=${commit_sha} -s -w" \
+        -trimpath \
+        -ldflags "-X=main.commitSHA=${ENVD_COMMIT} -s -w" \
         -o /out/envd \
         .; \
     chmod 0755 /out/envd; \
