@@ -147,7 +147,6 @@ domains = []
 # Destinations denied before per-sandbox allowOut/denyOut rules are evaluated.
 # Remove selected private ranges only when sandbox access to them is required.
 always_denied_cidrs = [
-  "10.0.0.0/8",
   "100.64.0.0/10",
   "127.0.0.0/8",
   "169.254.0.0/16",

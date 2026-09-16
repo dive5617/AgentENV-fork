@@ -369,7 +369,6 @@ cannot be overridden by `allowOut`.
 ```toml
 [network.egress]
 always_denied_cidrs = [
-  "10.0.0.0/8",
   "169.254.0.0/16",
 ]
 ```
