@@ -22,7 +22,6 @@ pub struct NetworkConfig {
 pub struct NetworkEgressConfig {
     /// Node-level destinations that sandbox egress policy cannot override.
     #[config(default = [
-        "10.0.0.0/8",
         "100.64.0.0/10",
         "127.0.0.0/8",
         "169.254.0.0/16",

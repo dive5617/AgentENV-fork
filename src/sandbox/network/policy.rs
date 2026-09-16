@@ -702,19 +702,22 @@ mod tests {
         assert!(!commands.iter().any(|command| {
             append_rule(command) == Some("-i tap0 -o vpeer -d 10.12.0.2/32 -j ACCEPT")
         }));
-        let hard_deny_pos = commands
-            .iter()
-            .position(|command| {
-                append_rule(command) == Some("-i tap0 -o vpeer -d 10.0.0.0/8 -j REJECT")
-            })
-            .unwrap();
-        assert!(established_pos < hard_deny_pos);
-        assert!(dns_udp_pos < hard_deny_pos);
-        assert!(dns_tcp_pos < hard_deny_pos);
+        assert!(!commands.iter().any(|command| {
+            append_rule(command) == Some("-i tap0 -o vpeer -d 10.0.0.0/8 -j REJECT")
+        }));
         let shared_deny_pos = commands
             .iter()
             .position(|command| {
                 append_rule(command) == Some("-i tap0 -o vpeer -d 100.64.0.0/10 -j REJECT")
+            })
+            .unwrap();
+        assert!(established_pos < shared_deny_pos);
+        assert!(dns_udp_pos < shared_deny_pos);
+        assert!(dns_tcp_pos < shared_deny_pos);
+        let loopback_deny_pos = commands
+            .iter()
+            .position(|command| {
+                append_rule(command) == Some("-i tap0 -o vpeer -d 127.0.0.0/8 -j REJECT")
             })
             .unwrap();
         let user_chain_pos = commands
@@ -724,9 +727,9 @@ mod tests {
             })
             .unwrap();
 
-        assert!(hard_deny_pos < shared_deny_pos);
-        assert!(hard_deny_pos < user_chain_pos);
+        assert!(shared_deny_pos < loopback_deny_pos);
         assert!(shared_deny_pos < user_chain_pos);
+        assert!(loopback_deny_pos < user_chain_pos);
     }
 
     #[test]
