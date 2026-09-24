@@ -7,8 +7,17 @@ FROM rust:1-bookworm AS chef
 WORKDIR /build
 ENV CARGO_TARGET_DIR=/build/target
 ENV RUSTUP_TOOLCHAIN=${RUST_VERSION}
+ARG CARGO_REGISTRY_MIRROR
 ARG APT_MIRROR_BASE
 COPY deploy/docker/apply_apt_mirror.sh /usr/local/bin/apply_apt_mirror.sh
+
+# Optionally replace crates.io with a caller-selected sparse registry mirror.
+# The default stays on crates.io when the build arg is empty.
+RUN if [ -n "${CARGO_REGISTRY_MIRROR}" ]; then \
+        mkdir -p /usr/local/cargo \
+        && printf '[source.crates-io]\nreplace-with = "mirror"\n\n[source.mirror]\nregistry = "%s"\n' \
+            "${CARGO_REGISTRY_MIRROR}" > /usr/local/cargo/config.toml; \
+    fi
 
 # envd build scripts require protoc during Rust compilation.
 RUN sh /usr/local/bin/apply_apt_mirror.sh "${APT_MIRROR_BASE}" \
