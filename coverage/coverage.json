@@ -1,0 +1,25 @@
+{
+  "branches": {
+    "coverage": "-",
+    "missed": 0,
+    "total": 0
+  },
+  "functions": {
+    "coverage": "77.08%",
+    "missed": 1532,
+    "total": 6683
+  },
+  "generated_at": "2026-10-14T08:57:16Z",
+  "lines": {
+    "coverage": "81.08%",
+    "missed": 10680,
+    "total": 56437
+  },
+  "package": "workspace",
+  "regions": {
+    "coverage": "79.67%",
+    "missed": 16453,
+    "total": 80929
+  },
+  "run_url": "https://github.com/dive5617/AgentENV-fork/actions/runs/38535735336"
+}
