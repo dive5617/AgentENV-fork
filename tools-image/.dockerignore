@@ -3,3 +3,7 @@
 !init
 !pivot-init
 !Makefile
+!envd
+!envd/**
+envd/bin
+envd/bin/**

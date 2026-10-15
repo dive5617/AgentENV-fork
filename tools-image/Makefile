@@ -3,8 +3,7 @@ SHELL := /usr/bin/env bash
 .DEFAULT_GOAL := build
 
 TOOLS_VERSION ?= 0.1.1
-ENVD_REF ?= 2026.17
-ENVD_UPSTREAM_REPO ?= https://github.com/e2b-dev/infra.git
+ENVD_COMMIT ?= $(shell git rev-parse HEAD)
 HOST_MACHINE := $(shell uname -m)
 ifeq ($(HOST_MACHINE),x86_64)
 DEFAULT_ARCH := amd64
@@ -26,7 +25,12 @@ PUBLISH_PLATFORMS ?= linux/amd64,linux/arm64
 IMAGE ?= agentenv-tools:$(TOOLS_VERSION)
 DOCKER ?= docker
 
-.PHONY: build publish push check-buildx check-tools-version check-publish-image
+.PHONY: build publish push test check-buildx check-tools-version check-publish-image
+
+test:
+	./tests/verify-init-runtime-paths.sh
+	$(MAKE) -C kernel test
+
 
 check-buildx:
 	@"$(DOCKER)" buildx version >/dev/null 2>&1 || { \
@@ -68,8 +72,7 @@ build: check-buildx check-tools-version
 		--platform "$(PLATFORM)" \
 		--target artifact \
 		--build-arg "TOOLS_VERSION=$(TOOLS_VERSION)" \
-		--build-arg "ENVD_REF=$(ENVD_REF)" \
-		--build-arg "ENVD_UPSTREAM_REPO=$(ENVD_UPSTREAM_REPO)" \
+		--build-arg "ENVD_COMMIT=$(ENVD_COMMIT)" \
 		-t "$(IMAGE)" \
 		--load \
 		.
@@ -78,8 +81,7 @@ publish: check-buildx check-tools-version check-publish-image
 		--platform "$(PUBLISH_PLATFORMS)" \
 		--target artifact \
 		--build-arg "TOOLS_VERSION=$(TOOLS_VERSION)" \
-		--build-arg "ENVD_REF=$(ENVD_REF)" \
-		--build-arg "ENVD_UPSTREAM_REPO=$(ENVD_UPSTREAM_REPO)" \
+		--build-arg "ENVD_COMMIT=$(ENVD_COMMIT)" \
 		-t "$(IMAGE)" \
 		--push \
 		.

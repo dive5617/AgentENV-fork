@@ -23,6 +23,10 @@
 /env-*/**
 **/.cache
 **/.tmp
+/tools-image/envd/bin
+/tools-image/envd/bin/**
+/tools-image/out
+/tools-image/out/**
 
 # Local caches and transient outputs.
 **/__pycache__

@@ -9,9 +9,13 @@ does not rebuild this image; launch downloads and converts the configured tools
 release from `config/deps_manifest.toml` when it is missing locally, unless
 `tools.drive_path` points at a local ext4 file.
 
+The in-tree envd carries the compatibility behavior required by AgentENV: SDK
+commands do not enter a Bash login shell, so OCI and runtime environment values
+are preserved without changing the E2B SDK interface.
+
 The build is intentionally self-contained:
 
-1. Clone and compile `envd` from `e2b-dev/infra` at `ENVD_REF`.
+1. Compile the patched repository-owned source from `./envd`.
 2. Assemble the guest tools rootfs with BusyBox, `/init`, `/agentenv/pivot-init`,
    and `/agentenv/envd`.
 3. Export the tools rootfs as an OCI image with the
@@ -20,9 +24,9 @@ The build is intentionally self-contained:
 Requirements:
 
 - Docker with the Buildx plugin available (`docker buildx version`).
-- The default `GO_VERSION` is aligned with the default upstream `ENVD_REF`.
-  Override it from `docker buildx build` only if the selected envd source
-  supports a different Go toolchain.
+- The default `GO_VERSION` is aligned with the in-tree envd source. Override
+  it from `docker buildx build` only if that source supports a different Go
+  toolchain.
 
 ## Local Build
 
@@ -48,9 +52,8 @@ agentenv-tools:<TOOLS_VERSION>
 
 `TOOLS_VERSION` is the SemVer release of the complete drive, including envd,
 BusyBox, and the init scripts. Published versions are immutable: any byte-level
-change requires a new version. `ENVD_REF` remains the upstream `e2b-dev/infra`
-ref used to compile envd and is not necessarily the same string as the version
-reported by the binary.
+change requires a new version. `ENVD_COMMIT` records the AgentENV revision used
+to compile the in-tree envd source and is reported by the binary.
 
 Official releases use normal versions such as `0.1.0`. Custom distributions use
 a prerelease identifier that is unique within the AgentENV deployment, such as
@@ -88,8 +91,7 @@ The build accepts these Make variables:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `TOOLS_VERSION` | `0.1.1` | Immutable SemVer release of the complete tools drive |
-| `ENVD_REF` | `2026.17` | Tag, branch, or fetchable commit to build from the envd upstream repository |
-| `ENVD_UPSTREAM_REPO` | `https://github.com/e2b-dev/infra.git` | Repository containing `packages/envd` |
+| `ENVD_COMMIT` | current AgentENV Git commit | Source revision embedded in `envd -commit` |
 | `ARCH` | host architecture, normalized to `amd64` or `arm64` | Target architecture |
 | `PUBLISH_PLATFORMS` | `linux/amd64,linux/arm64` | Platforms included in the published OCI image |
 | `IMAGE` | `agentenv-tools:${TOOLS_VERSION}` | Local or remote image tag |
@@ -98,12 +100,11 @@ The build accepts these Make variables:
 Examples:
 
 ```bash
-make TOOLS_VERSION=0.1.1 ENVD_REF=2026.17 ARCH=amd64
+make TOOLS_VERSION=0.1.1 ARCH=amd64
 
 make \
-  ENVD_UPSTREAM_REPO=https://github.com/e2b-dev/infra.git \
   TOOLS_VERSION=0.1.1 \
-  ENVD_REF=2026.17 \
+  ENVD_COMMIT="$(git rev-parse HEAD)" \
   ARCH=amd64
 ```
 
@@ -118,12 +119,12 @@ tags to prevent concurrent or external publishers from replacing a release.
 ```bash
 make publish \
   TOOLS_VERSION=0.1.1 \
-  ENVD_REF=2026.17 \
+  ENVD_COMMIT="$(git rev-parse HEAD)" \
   IMAGE=ghcr.io/kvcache-ai/agentenv-tools:0.1.1
 
 make publish \
   TOOLS_VERSION=0.1.1-custom.1 \
-  ENVD_REF=2026.17 \
+  ENVD_COMMIT="$(git rev-parse HEAD)" \
   IMAGE=registry.example.com/custom/agentenv-tools:0.1.1-custom.1
 ```
 

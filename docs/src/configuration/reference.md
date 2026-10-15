@@ -59,6 +59,11 @@ Linux kernel image for microVMs.
 | `url` | string | manifest value | Optional download URL template override with `{version}` placeholder |
 | `image_path` | string | derived from manifest/config version | Explicit path to a local `vmlinux.bin`. Setup skips the kernel download and requires this to be a readable, non-empty regular file |
 
+For an opt-in Intel x86_64 kernel with nested KVM and TUN support, see
+`tools-image/kernel/README.md` in the repository.
+The default downloaded kernel is unchanged. Validate on an isolated server
+before selecting the custom kernel; live inner-VM snapshot/restore is not covered.
+
 ## `[overlaybd]`
 
 Optional override for the OverlayBD tools release that setup downloads. When the
@@ -241,7 +246,7 @@ override them.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `always_denied_cidrs` | array of IPv4 CIDR strings | `["10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16"]` | Destination CIDRs that are always rejected from sandboxes before user egress policy is evaluated. Deployments can remove selected RFC1918 ranges when sandbox egress to those destinations is required. |
+| `always_denied_cidrs` | array of IPv4 CIDR strings | `["100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16"]` | Destination CIDRs that are always rejected from sandboxes before user egress policy is evaluated. Deployments can add or remove selected ranges to match their network boundaries. |
 
 ## `[network.internal]`
 
