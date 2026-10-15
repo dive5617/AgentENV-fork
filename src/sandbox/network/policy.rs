@@ -807,8 +807,9 @@ mod tests {
 
         assert!(policy.is_domain_allowed("example.com", None));
         assert!(policy.is_domain_allowed("example.com", Some(Ipv4Addr::new(192, 0, 2, 10))));
+        assert!(policy.is_domain_allowed("example.com", Some(Ipv4Addr::new(10, 0, 0, 1))));
         assert!(!policy.is_domain_allowed("other.example", None));
-        assert!(!policy.is_domain_allowed("example.com", Some(Ipv4Addr::new(10, 0, 0, 1))));
+        assert!(!policy.is_domain_allowed("example.com", Some(Ipv4Addr::new(100, 64, 0, 1))));
         assert!(!policy.is_domain_allowed("example.com", Some(Ipv4Addr::new(10, 12, 1, 1))));
     }
 
